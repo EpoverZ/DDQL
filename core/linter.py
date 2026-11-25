@@ -3,6 +3,7 @@
 # =============================#
 
 import io
+import os
 import re
 import contextlib
 from typing import Union, Optional, Dict, Any, List
@@ -199,11 +200,10 @@ def lint_dataset(
     id_ratio: float = 0.95,
     min_group_pct: float = 10.0,
     capture_stdout: bool = True,
-    limits: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Executes the ML dataset linting rules and returns a structured dictionary.
-    Includes detected 'file_format' in summary, structured 'findings', and 'limits'.
+    Includes detected 'file_format' in summary, structured 'findings', and stats.
     """
     stdout_capture = io.StringIO()
     cm = contextlib.redirect_stdout(stdout_capture) if capture_stdout else contextlib.nullcontext()
@@ -213,6 +213,8 @@ def lint_dataset(
             df = df_or_path.copy()
             file_format = "dataframe"
         else:
+            if not os.path.exists(df_or_path):
+                raise FileNotFoundError(f"Dataset file not found: '{df_or_path}'")
             file_format = detect_file_format(df_or_path)
             df = load_dataset(df_or_path)
 
@@ -308,5 +310,4 @@ def lint_dataset(
             "constant_columns": constant_cols,
             "target_analysis": target_info,
         },
-        "limits": limits or {},
     }

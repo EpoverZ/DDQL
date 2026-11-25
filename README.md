@@ -1,103 +1,222 @@
-# DQDLz (DataQuality & DataLintz)
+# DQDLz (`ml-dataset-lint`)
 
-DQDLz is a lightweight, rule-based dataset linting engine and REST API designed to detect data quality, target distribution, feature leakage, demographic bias, and structural trainability risks **before** training machine learning models.
+**DQDLz** (DataQuality & DataLintz) is a fast, lightweight, rule-based terminal CLI and library for linting machine learning datasets before training.
 
-It functions like a code linter for datasets — flagging missing values, row duplication, constant columns, severe class imbalance, high target correlation leakage, and few-shot representation risks early in the ML pipeline.
-
----
-
-## Supported Formats
-
-DQDLz supports all major tabular and semi-structured dataset formats:
-
-- **CSV (`.csv`)**: With automatic delimiter sniffing and encoding fallbacks (`utf-8`, `utf-8-sig`, `latin1`, `cp1252`).
-- **TSV / TXT (`.tsv`, `.txt`)**: Tab-separated values.
-- **Excel (`.xlsx`, `.xls`)**: Single-sheet workbooks loaded via `openpyxl`.
-- **JSON (`.json`, `.jsonl`, `.ndjson`)**: Standard JSON arrays, dictionary record wrappers, and newline-delimited JSON flattened automatically via `pd.json_normalize`.
-- **Apache Parquet (`.parquet`)**: High-performance columnar data loaded via `pyarrow`.
-- **Feather (`.feather`)**: Ultra-fast binary tabular data loaded via `pyarrow`.
+Just as a code linter flags bugs, type errors, and anti-patterns before compilation, DQDLz scans tabular data to detect data quality anomalies, severe class imbalances, feature leakage, demographic representation bias, and structural trainability issues **before** you feed data to your models.
 
 ---
 
-## Quickstart & Local Usage
+## Key Features
 
-### Installation
+- **10 Supported Formats**: Automatically detects and loads tabular data across formats without manual conversion.
+- **Rule-Based & Deterministic**: Zero black-box guesswork — every check uses transparent, customizable mathematical thresholds.
+- **Leakage & Bias Detection**: Identifies features suspiciously correlated with targets, ID-like features, and under-represented demographic groups.
+- **Dual CLI Modes**: Use interactive prompts or direct command-line flags.
+- **Scripting & CI/CD Ready**: Output clean, structured JSON with `--json` for integration into automated pipelines.
+- **Unhashable Safe**: Gracefully handles nested structures (lists, dictionaries, JSON) without crashing uniqueness or duplicate row checks.
+- **Zero Cloud Overhead**: Runs 100% locally on your machine with no external network calls, no telemetry, and no artificial file size caps.
 
-Clone the repository and install dependencies:
+---
+
+## Supported Dataset Formats
+
+DQDLz supports all major tabular and semi-structured file formats:
+
+| Format | File Extensions | Notes |
+| :--- | :--- | :--- |
+| **CSV** | `.csv` | Automatic delimiter sniffing and encoding fallbacks (`utf-8`, `utf-8-sig`, `latin1`, `cp1252`). |
+| **TSV / Plain Text** | `.tsv`, `.txt` | Tab-delimited tabular datasets with encoding fallbacks. |
+| **Excel** | `.xlsx`, `.xls` | Single and multi-column spreadsheets loaded via `openpyxl`. |
+| **JSON** | `.json` | Standard JSON records or wrapped objects normalized via `pd.json_normalize`. |
+| **Newline JSON** | `.jsonl`, `.ndjson` | High-throughput line-delimited JSON streams. |
+| **Apache Parquet** | `.parquet` | Columnar binary format powered by `pyarrow`. |
+| **Apache Arrow Feather** | `.feather` | Ultra-fast memory-mapped binary storage powered by `pyarrow`. |
+
+---
+
+## Installation
+
+Clone the repository and install the lightweight dependencies:
 
 ```bash
-git clone https://github.com/your-username/dqdlz.git
-cd dqdlz
+git clone https://github.com/your-username/ml-dataset-lint.git
+cd ml-dataset-lint
 pip install -r requirements.txt
 ```
 
-### Running via Terminal CLI (`main.py`)
+### Dependencies
+- `python>=3.9`
+- `numpy>=1.24.0`
+- `pandas>=2.0.0`
+- `openpyxl>=3.1.0`
+- `pyarrow>=14.0.0`
 
-Run interactively:
+*(Optional for running test suite)*:
+```bash
+pip install pytest
+```
+
+---
+
+## CLI Usage
+
+### 1. Interactive Mode
+Run without arguments to launch the interactive prompt:
 ```bash
 python main.py
 ```
-Or provide arguments directly:
-```bash
-python main.py path/to/dataset.parquet target_column
+```text
+ENTER DATASET FILE PATH (.csv, .tsv, .xlsx, .json, .parquet, .feather): data/churn.parquet
+ENTER TARGET COLUMN (OR LEAVE BLANK): churned
 ```
 
-### Running via Web API (`api.py`)
+### 2. Flag-Based Mode
 
-Start the FastAPI server locally on port 7860:
+#### Unsupervised Linting (No Target Column)
 ```bash
-uvicorn api:app --host 0.0.0.0 --port 7860 --reload
+python main.py data.csv
 ```
 
----
-
-## API Endpoints
-
-### 1. Health Check
+#### Supervised Linting (With Target Column)
+Specify `--target` (or `-t`) to activate target distribution, label dominance, leakage, and sensitive feature checks:
 ```bash
-curl http://127.0.0.1:7860/health
+python main.py data.parquet --target label
 ```
-**Response**:
+
+#### JSON Output Mode (for CI/CD & Scripting)
+Add `--json` to pipe clean structured JSON directly to tools like `jq`, Python, or CI/CD runners:
+```bash
+python main.py data.xlsx --target label --json
+```
+
+Example JSON structure:
 ```json
 {
   "status": "ok",
-  "version": "0.8.0"
+  "version": "0.8.0",
+  "summary": {
+    "file_format": "excel",
+    "rows": 1000,
+    "columns": 12,
+    "column_types": { ... }
+  },
+  "warnings": [
+    "[WARN] Column 'age' has 34.50% missing values",
+    "[WARN] Feature 'account_id' appears ID-like"
+  ],
+  "findings": [
+    {
+      "level": "warn",
+      "category": "data_quality",
+      "code": "missing_values_threshold_exceeded",
+      "message": "[WARN] Column 'age' has 34.50% missing values",
+      "columns": ["age"]
+    }
+  ],
+  "stats": {
+    "missing_values": { "age": { "count": 345, "percentage": 34.5 } },
+    "duplicate_rows": { "count": 0, "percentage": 0.0 },
+    "constant_columns": [],
+    "target_analysis": { ... }
+  }
 }
 ```
 
-### 2. Lint Dataset
+### 3. Custom Threshold Flags
+
+Tune any linting sensitivity threshold directly via command-line arguments:
+
 ```bash
-curl -X POST "http://127.0.0.1:7860/lint" \
-  -F "file=@dataset.csv" \
-  -F "target=target"
+python main.py dataset.csv --target is_fraud \
+  --missing-threshold 20.0 \
+  --dup-threshold 2.0 \
+  --corr-threshold 0.85 \
+  --dominance-threshold 80.0 \
+  --rare-count-threshold 50
 ```
 
-If `API_KEY` is configured in the environment, supply the `X-DQDLZ-KEY` header:
-```bash
-curl -X POST "http://127.0.0.1:7860/lint" \
-  -H "X-DQDLZ-KEY: your_api_key_here" \
-  -F "file=@dataset.parquet" \
-  -F "target=target"
-```
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `--target`, `-t` | `None` | Target column name for supervised analysis. |
+| `--json` | `False` | Output structured JSON instead of human-readable text. |
+| `--missing-threshold` | `30.0` | Max missing value percentage before flagging a column (`%`). |
+| `--dup-threshold` | `5.0` | Max duplicate row percentage before flagging dataset (`%`). |
+| `--dominance-threshold`| `90.0` | Max class dominance percentage before flagging imbalance (`%`). |
+| `--rare-count-threshold`| `20` | Minimum sample count required per class before flagging rare classes. |
+| `--corr-threshold` | `0.9` | Absolute Pearson correlation with target indicating leakage (`0.0 - 1.0`). |
+| `--id-ratio` | `0.95` | Unique value ratio indicating an ID-like column (`0.0 - 1.0`). |
+| `--min-group-pct` | `10.0` | Minimum demographic subgroup share before flagging bias (`%`). |
 
-For full documentation of request fields, error codes, and response structures, see [docs/API.md](file:///d:/work/Lint/ml-dataset-lint-main/docs/API.md).
+View all flags anytime with:
+```bash
+python main.py --help
+```
 
 ---
 
-## Operational Limits & Configuration
+## What Checks Are Performed?
 
-The service is configured through environment variables with safe defaults:
+DQDLz groups rules into five core categories:
 
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `MAX_UPLOAD_MB` | `25` | Maximum upload file size in megabytes (returns 413 if exceeded). |
-| `MAX_COLUMNS` | `2000` | Maximum column count permitted after loading (returns 422 if exceeded). |
-| `MAX_CELLS` | `5000000` | Maximum total cell count permitted (`rows * cols`) (returns 422 if exceeded). |
-| `MAX_CONCURRENT` | `2` | Maximum concurrent processing requests allowed (returns 429 if busy). |
-| `PROCESS_TIMEOUT_SECONDS` | `60` | Maximum processing timeout in seconds (returns 504 if exceeded). |
-| `API_KEY` | *(empty)* | Optional secret key; when set, requires `X-DQDLZ-KEY` header on `/lint`. |
-| `ALLOWED_ORIGINS` | *(empty)* | Comma-separated list of allowed CORS origins. Empty disables CORS. |
-| `ENABLE_DOCS` | `false` | When `true`, enables Swagger `/docs`, ReDoc, and `/openapi.json`. |
+1. **Data Quality (`data_quality`)**:
+   - Missing value percentage per column.
+   - Exact duplicate row percentages (unhashable-safe).
+   - Zero-variance constant columns.
+   - Small dataset warnings (`< 100` rows).
+   - High-dimensionality / curse of dimensionality (`cols > rows`).
+
+2. **Target & Imbalance (`target`)**:
+   - Class dominance detection (`> 90%` of samples in single class).
+   - Rare class representation (`< 20` samples in minority class).
+
+3. **Data Leakage (`leakage`)**:
+   - Extreme feature-to-target correlation (`|r| > 0.90`).
+   - High-cardinality ID-like columns (`nunique / rows > 0.95`).
+   - Critical leakage risk (columns that are both ID-like and highly correlated).
+
+4. **Demographic Bias Signals (`bias`)**:
+   - Under-represented groups in sensitive columns (`gender`, `sex`, `race`, `age`, `region`, `income`).
+
+5. **Trainability & Health (`trainability`)**:
+   - Verification of presence of numeric features for ML models.
+   - Unhandled missing value presence blocking common estimators.
+
+For full mathematical definitions, codes, and rationale, see [docs/CHECKS.md](docs/CHECKS.md).
+
+---
+
+## Python API Usage
+
+You can also import and use DQDLz directly within your Python scripts or notebooks:
+
+```python
+from core.linter import lint_dataset
+
+# Lint from a file path or an in-memory pandas DataFrame
+report = lint_dataset("data.parquet", target="churn", missing_threshold=25.0)
+
+if report["findings"]:
+    print(f"Detected {len(report['findings'])} issues:")
+    for finding in report["findings"]:
+        print(f" - [{finding['level'].upper()}] {finding['category']}: {finding['message']}")
+```
+
+---
+
+## Running Tests
+
+Execute the comprehensive test suite with `pytest`:
+
+```bash
+pytest -v tests/
+```
+
+The test suite validates:
+- CLI argument parsing and threshold flags.
+- Terminal output formatting and `--json` schemas.
+- Ingestion across CSV, Excel, JSON, and Parquet.
+- Error handling on missing files, corrupt data, and invalid column names.
+- Interactive mode fallbacks.
 
 ---
 
@@ -107,43 +226,25 @@ The service is configured through environment variables with safe defaults:
 ml-dataset-lint/
 |-- .github/
 |   |-- workflows/
-|       |-- ci.yml           # Continuous integration (pytest)
-|       |-- deploy-hf.yml    # Automated deploy to Hugging Face Space
+|       |-- ci.yml           # Automated CLI test suite on push/PR
 |-- core/
-|   |-- loader.py            # Multi-format tabular data loader
-|   |-- summary.py           # Dataset schema overview & shape
-|   |-- checks.py            # Hardened validation & linting rules
-|   |-- report.py            # Terminal report formatter
+|   |-- loader.py            # 10-format universal dataset loader
+|   |-- summary.py           # Dataset schema overview & shape summaries
+|   |-- checks.py            # Core linting rules & unhashable sanitization
+|   |-- report.py            # Console output formatting
 |   |-- linter.py            # Structured linter engine & finding mapper
 |-- docs/
-|   |-- API.md               # API endpoints, limits, errors, and real payloads
-|   |-- CHECKS.md            # Exact rules, categories, codes, and thresholds
-|   |-- DATA-HANDLING.md     # Ephemeral storage, privacy, and zero telemetry
-|   |-- DEPLOY.md            # Hugging Face deployment, tokens, and rollback guide
-|-- space/
-|   |-- README.md            # Hugging Face Space deployment metadata
+|   |-- CHECKS.md            # Detailed catalog of all checks, formulas, and thresholds
 |-- tests/
-|   |-- test_api.py          # Pytest suite with FastAPI TestClient
-|-- api.py                   # Hardened FastAPI web service
-|-- main.py                  # Terminal CLI entry point
-|-- Dockerfile               # Hugging Face compliant Docker container
-|-- .dockerignore            # Build exclusion rules
-|-- requirements.txt         # Pinned production dependencies
-|-- README.md                # GitHub repository documentation
+|   |-- test_cli.py          # Pytest CLI and format test suite
+|-- main.py                  # CLI entry point (interactive & flag-driven)
+|-- requirements.txt         # Lightweight Python dependencies
+|-- README.md                # Project documentation
 |-- LICENSE                  # GNU General Public License v3.0
 ```
 
 ---
 
-## Documentation
-
-- [API Specification](file:///d:/work/Lint/ml-dataset-lint-main/docs/API.md): Endpoints, headers, error tables, and example requests.
-- [Lint Rules & Thresholds](file:///d:/work/Lint/ml-dataset-lint-main/docs/CHECKS.md): Catalog of all checks, codes, categories, and exact mathematical thresholds.
-- [Data Handling & Privacy](file:///d:/work/Lint/ml-dataset-lint-main/docs/DATA-HANDLING.md): Verified storage, lifecycle, cleanup, and privacy facts.
-- [Deployment Guide](file:///d:/work/Lint/ml-dataset-lint-main/docs/DEPLOY.md): Step-by-step setup for Hugging Face Docker Spaces, GitHub Actions, and rollback procedures.
-
----
-
 ## License
 
-This program is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License (Version 3)** as published by the Free Software Foundation. See the [LICENSE](file:///d:/work/Lint/ml-dataset-lint-main/LICENSE) file for complete details.
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See the [LICENSE](LICENSE) file for details.

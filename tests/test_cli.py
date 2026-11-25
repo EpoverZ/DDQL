@@ -30,7 +30,7 @@ def test_argparse_help():
     """Verify that --help parses cleanly and provides usage information."""
     parser = build_parser()
     help_text = parser.format_help()
-    assert "dqdlz" in help_text
+    assert "ddql" in help_text
     assert "--target" in help_text
     assert "--json" in help_text
     assert "--missing-threshold" in help_text

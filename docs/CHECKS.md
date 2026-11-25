@@ -1,6 +1,6 @@
-# DQDLz Linting Rules & Checks
+# DDQL Linting Rules & Checks
 
-This document lists every rule and check executed by the DQDLz engine, along with its category, machine-readable code, natural language explanation, and exact thresholds as defined directly in `core/checks.py`.
+This document lists every rule and check executed by the DDQL engine, along with its category, machine-readable code, natural language explanation, and exact thresholds as defined directly in `core/checks.py`.
 
 ---
 

@@ -1,6 +1,6 @@
-#####################
-## ML-DATASET-LINT ##
-#####################
+##########
+## DDQL ##
+##########
 
 import os
 import sys
@@ -30,8 +30,8 @@ from core.linter import lint_dataset
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="dqdlz",
-        description="DQDLz: Fast, rule-based ML dataset linter for tabular data quality, target imbalance, leakage, and trainability."
+        prog="ddql",
+        description="DDQL: Fast, rule-based dataset linter for tabular data quality, target imbalance, leakage, and trainability."
     )
     parser.add_argument(
         "file",

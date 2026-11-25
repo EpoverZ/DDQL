@@ -1,8 +1,8 @@
-# DQDLz (`ml-dataset-lint`)
+# DDQL
 
-**DQDLz** (DataQuality & DataLintz) is a fast, lightweight, rule-based terminal CLI and library for linting machine learning datasets before training.
+**DDQL** is a fast, lightweight, rule-based terminal CLI and library for linting machine learning datasets before training.
 
-Just as a code linter flags bugs, type errors, and anti-patterns before compilation, DQDLz scans tabular data to detect data quality anomalies, severe class imbalances, feature leakage, demographic representation bias, and structural trainability issues **before** you feed data to your models.
+Just as a code linter flags bugs, type errors, and anti-patterns before compilation, DDQL scans tabular data to detect data quality anomalies, severe class imbalances, feature leakage, demographic representation bias, and structural trainability issues **before** you feed data to your models.
 
 ---
 
@@ -20,7 +20,7 @@ Just as a code linter flags bugs, type errors, and anti-patterns before compilat
 
 ## Supported Dataset Formats
 
-DQDLz supports all major tabular and semi-structured file formats:
+DDQL supports all major tabular and semi-structured file formats:
 
 | Format | File Extensions | Notes |
 | :--- | :--- | :--- |
@@ -39,8 +39,8 @@ DQDLz supports all major tabular and semi-structured file formats:
 Clone the repository and install the lightweight dependencies:
 
 ```bash
-git clone https://github.com/your-username/ml-dataset-lint.git
-cd ml-dataset-lint
+git clone https://github.com/EpoverZ/DDQL.git
+cd DDQL
 pip install -r requirements.txt
 ```
 
@@ -156,7 +156,7 @@ python main.py --help
 
 ## What Checks Are Performed?
 
-DQDLz groups rules into five core categories:
+DDQL groups rules into five core categories:
 
 1. **Data Quality (`data_quality`)**:
    - Missing value percentage per column.
@@ -187,7 +187,7 @@ For full mathematical definitions, codes, and rationale, see [docs/CHECKS.md](do
 
 ## Python API Usage
 
-You can also import and use DQDLz directly within your Python scripts or notebooks:
+You can also import and use DDQL directly within your Python scripts or notebooks:
 
 ```python
 from core.linter import lint_dataset
@@ -223,7 +223,7 @@ The test suite validates:
 ## Project Structure
 
 ```text
-ml-dataset-lint/
+DDQL/
 |-- .github/
 |   |-- workflows/
 |       |-- ci.yml           # Automated CLI test suite on push/PR

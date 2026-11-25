@@ -202,7 +202,7 @@ def lint_dataset(
     capture_stdout: bool = True,
 ) -> Dict[str, Any]:
     """
-    Executes the ML dataset linting rules and returns a structured dictionary.
+    Executes the tabular dataset linting rules and returns a structured dictionary.
     Includes detected 'file_format' in summary, structured 'findings', and stats.
     """
     stdout_capture = io.StringIO()

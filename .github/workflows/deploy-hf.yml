@@ -1,0 +1,188 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest "httpx<0.28"
+
+      - name: Run test suite
+        run: |
+          pytest -v tests/
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Hugging Face Hub client
+        run: |
+          python -m pip install --upgrade pip
+          pip install huggingface_hub
+
+      - name: Assemble Space build directory
+        run: |
+          python -c "
+          import os, shutil, sys
+
+          build_dir = 'build/space'
+          if os.path.exists(build_dir):
+              shutil.rmtree(build_dir)
+          os.makedirs(build_dir, exist_ok=True)
+
+          # Copy core application files
+          shutil.copy('api.py', os.path.join(build_dir, 'api.py'))
+          shutil.copy('main.py', os.path.join(build_dir, 'main.py'))
+          shutil.copy('Dockerfile', os.path.join(build_dir, 'Dockerfile'))
+          shutil.copy('requirements.txt', os.path.join(build_dir, 'requirements.txt'))
+          shutil.copy('.dockerignore', os.path.join(build_dir, '.dockerignore'))
+          if os.path.exists('LICENSE'):
+              shutil.copy('LICENSE', os.path.join(build_dir, 'LICENSE'))
+
+          # Copy core package
+          shutil.copytree('core', os.path.join(build_dir, 'core'), ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+
+          # Copy space/README.md as the Space's root README.md
+          shutil.copy('space/README.md', os.path.join(build_dir, 'README.md'))
+
+          print('Build directory assembled successfully with files:')
+          for root, dirs, files in os.walk(build_dir):
+              for f in files:
+                  print('  ', os.path.join(root, f))
+          "
+
+      - name: Verify file sizes (fail loudly on files > 10MB)
+        run: |
+          python -c "
+          import os, sys
+
+          build_dir = 'build/space'
+          max_allowed_bytes = 10 * 1024 * 1024
+          oversized = []
+
+          for root, dirs, files in os.walk(build_dir):
+              for f in files:
+                  path = os.path.join(root, f)
+                  size = os.path.getsize(path)
+                  if size > max_allowed_bytes:
+                      oversized.append((path, size))
+
+          if oversized:
+              print('FATAL ERROR: Found file(s) exceeding 10 MB in build payload:', file=sys.stderr)
+              for p, s in oversized:
+                  print(f'  {p}: {s / (1024*1024):.2f} MB', file=sys.stderr)
+              sys.exit(1)
+
+          print('File size check passed: All files are within the 10 MB limit.')
+          "
+
+      - name: Upload to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+        run: |
+          python -c "
+          import os, sys
+          from huggingface_hub import HfApi
+
+          token = os.environ.get('HF_TOKEN')
+          space_id = os.environ.get('HF_SPACE_ID')
+
+          if not token or not space_id:
+              print('FATAL ERROR: HF_TOKEN secret or HF_SPACE_ID variable missing.', file=sys.stderr)
+              sys.exit(1)
+
+          api = HfApi(token=token)
+          print(f'Uploading build/space payload to Hugging Face Space: {space_id}...')
+          api.upload_folder(
+              folder_path='build/space',
+              repo_id=space_id,
+              repo_type='space',
+              delete_patterns=['*'],
+          )
+          print('Upload completed successfully.')
+          "
+
+      - name: Wait for Space and verify /health
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+        run: |
+          python -c "
+          import os, sys, time, urllib.request, json
+          from huggingface_hub import HfApi
+
+          token = os.environ.get('HF_TOKEN')
+          space_id = os.environ.get('HF_SPACE_ID')
+          api = HfApi(token=token)
+
+          # Derive space direct URL
+          parts = space_id.split('/')
+          if len(parts) == 2:
+              user_sub = parts[0].replace('_', '-').lower()
+              repo_sub = parts[1].replace('_', '-').lower()
+              health_url = f'https://{user_sub}-{repo_sub}.hf.space/health'
+          else:
+              health_url = f'https://huggingface.co/spaces/{space_id}'
+
+          print(f'Monitoring Hugging Face Space runtime for: {space_id}')
+          print(f'Target health URL: {health_url}')
+
+          max_wait = 300 # 5 minutes max
+          start = time.time()
+          success = False
+
+          while time.time() - start < max_wait:
+              try:
+                  runtime = api.get_space_runtime(space_id)
+                  stage = getattr(runtime, 'stage', None)
+                  print(f'Current Space Stage: {stage} ({int(time.time() - start)}s elapsed)')
+
+                  if stage in ['RUNNING', 'APP_STARTING']:
+                      try:
+                          with urllib.request.urlopen(health_url, timeout=5) as resp:
+                              if resp.status == 200:
+                                  data = json.loads(resp.read().decode())
+                                  print('Health check successful:', data)
+                                  success = True
+                                  break
+                      except Exception as e:
+                          print('Endpoint probe error:', str(e))
+
+                  if stage in ['BUILD_ERROR', 'RUNTIME_ERROR', 'CONFIG_ERROR']:
+                      print(f'FATAL: Space entered failed stage: {stage}', file=sys.stderr)
+                      sys.exit(1)
+
+              except Exception as e:
+                  print('Status query error:', str(e))
+
+              time.sleep(10)
+
+          if not success:
+              print('WARNING: Space took longer than expected to report healthy, but deploy succeeded.', file=sys.stderr)
+          "
